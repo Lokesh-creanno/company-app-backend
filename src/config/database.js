@@ -1,6 +1,11 @@
 const { Sequelize } = require('sequelize');
+const dns = require('dns');
 const logger = require('../utils/logger');
 const path = require('path');
+
+// Force IPv4 DNS resolution globally — Railway doesn't support IPv6 outbound
+// This prevents ENETUNREACH when Supabase hostname resolves to an IPv6 address
+dns.setDefaultResultOrder('ipv4first');
 
 let sequelize;
 
@@ -12,7 +17,7 @@ if (process.env.DB_DIALECT === 'sqlite') {
     logging: false,
   });
 } else {
-  // Production PostgreSQL
+  // Production PostgreSQL (Supabase)
   sequelize = new Sequelize(
     process.env.DB_NAME,
     process.env.DB_USER,
@@ -27,8 +32,6 @@ if (process.env.DB_DIALECT === 'sqlite') {
         ssl: (process.env.NODE_ENV === 'production' || process.env.DB_SSL === 'true')
           ? { require: true, rejectUnauthorized: false }
           : false,
-        // Force IPv4 — prevents ENETUNREACH on Railway (no IPv6 outbound)
-        family: 4,
       },
     }
   );
