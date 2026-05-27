@@ -1,8 +1,10 @@
-// Load environment — prefer .env.test for local dev if .env doesn't exist
+// Load environment — skip dotenv on Railway (env vars are injected by the platform)
 const fs = require('fs');
 const path = require('path');
-const envFile = fs.existsSync(path.join(__dirname, '../.env')) ? '../.env' : '../.env.test';
-require('dotenv').config({ path: path.join(__dirname, envFile) });
+if (!process.env.RAILWAY_ENVIRONMENT && !process.env.RAILWAY_SERVICE_NAME) {
+  const envFile = fs.existsSync(path.join(__dirname, '../.env')) ? '../.env' : '../.env.test';
+  require('dotenv').config({ path: path.join(__dirname, envFile) });
+}
 
 const app = require('./app');
 const { sequelize } = require('./config/database');
@@ -27,7 +29,8 @@ async function startServer() {
       logger.info(`   Store: ${process.env.STORAGE_LOCAL === 'true' ? 'Local disk' : 'AWS S3'}`);
     });
   } catch (error) {
-    logger.error('Failed to start server:', error.message);
+    logger.error(`Failed to start server: ${error.message || error}`);
+    if (error.stack) logger.error(error.stack);
     process.exit(1);
   }
 }
