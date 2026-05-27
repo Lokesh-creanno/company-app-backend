@@ -27,6 +27,8 @@ if (process.env.DB_DIALECT === 'sqlite') {
         ssl: (process.env.NODE_ENV === 'production' || process.env.DB_SSL === 'true')
           ? { require: true, rejectUnauthorized: false }
           : false,
+        // Force IPv4 — prevents ENETUNREACH on Railway (no IPv6 outbound)
+        family: 4,
       },
     }
   );
