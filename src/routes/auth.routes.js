@@ -5,6 +5,7 @@ const ctrl = require('../controllers/auth.controller');
 
 router.post('/send-otp', ctrl.sendOTP);
 router.post('/verify-otp', ctrl.verifyOTP);
+router.post('/demo-login', ctrl.demoLogin);
 router.post('/refresh-token', ctrl.refreshToken);
 router.post('/logout', authenticate, ctrl.logout);
 router.get('/me', authenticate, ctrl.me);

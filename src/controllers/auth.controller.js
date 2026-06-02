@@ -12,6 +12,60 @@ function generateTokens(user) {
   return { accessToken, refreshToken };
 }
 
+// ─── Demo Login (for public web demo) ─────────────────────────────────────────
+// Creates a persistent demo admin user if not present, then returns a real token.
+// Used by the public GitHub Pages web demo so reviewers can test the app
+// end-to-end without going through email + OTP.
+exports.demoLogin = async (req, res, next) => {
+  try {
+    const DEMO_EMAIL = 'demo@creanno.com';
+
+    let user = await User.findOne({ where: { email: DEMO_EMAIL } });
+
+    if (!user) {
+      logger.info(`Creating demo admin user: ${DEMO_EMAIL}`);
+      user = await User.create({
+        employeeId:  'EMP-DEMO',
+        firstName:   'Demo',
+        lastName:    'Admin',
+        email:       DEMO_EMAIL,
+        phone:       '+91 00000 00000',
+        role:        'admin',
+        department:  'Operations',
+        designation: 'Owner',
+        isActive:    true,
+        joiningDate: new Date(),
+      });
+    }
+
+    // Always ensure demo user stays admin and active (in case it was changed)
+    if (!user.isActive || user.role !== 'admin') {
+      await user.update({ isActive: true, role: 'admin' });
+    }
+
+    const { accessToken, refreshToken } = generateTokens(user);
+    await user.update({ lastLogin: new Date(), refreshToken });
+
+    return success(res, {
+      accessToken,
+      refreshToken,
+      user: {
+        id:           user.id,
+        employeeId:   user.employeeId,
+        firstName:    user.firstName,
+        lastName:     user.lastName,
+        email:        user.email,
+        role:         user.role,
+        department:   user.department,
+        designation:  user.designation,
+        profilePhoto: user.profilePhoto,
+      },
+    }, 'Demo login successful');
+  } catch (err) {
+    next(err);
+  }
+};
+
 exports.sendOTP = async (req, res, next) => {
   try {
     const { email } = req.body;

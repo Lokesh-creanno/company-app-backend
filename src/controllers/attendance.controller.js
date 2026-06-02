@@ -7,11 +7,15 @@ const moment = require('moment');
 exports.checkIn = async (req, res, next) => {
   try {
     const userId = req.user.id;
-    const today = moment().format('YYYY-MM-DD');
+
+    // Prefer client-supplied local date (avoids UTC vs IST mismatch on Railway)
+    // Client always sends localDate: 'YYYY-MM-DD' in device's local timezone
+    const today = req.body.localDate || moment().format('YYYY-MM-DD');
 
     const existing = await Attendance.findOne({ where: { userId, date: today } });
     if (existing?.checkInTime) return error(res, 'Already checked in today', 409);
 
+    const now = new Date();
     const location = {
       lat: req.body.lat,
       lng: req.body.lng,
@@ -20,15 +24,15 @@ exports.checkIn = async (req, res, next) => {
 
     let record;
     if (existing) {
-      record = await existing.update({ checkInTime: new Date(), checkInLocation: location, status: 'present' });
+      record = await existing.update({ checkInTime: now, checkInLocation: location, status: 'present' });
     } else {
       record = await Attendance.create({
-        userId, date: today, checkInTime: new Date(),
+        userId, date: today, checkInTime: now,
         checkInLocation: location, status: 'present',
       });
     }
 
-    return success(res, { checkInTime: record.checkInTime }, 'Checked in successfully');
+    return success(res, { checkInTime: record.checkInTime, date: today }, 'Checked in successfully');
   } catch (err) {
     next(err);
   }
@@ -37,7 +41,9 @@ exports.checkIn = async (req, res, next) => {
 exports.checkOut = async (req, res, next) => {
   try {
     const userId = req.user.id;
-    const today = moment().format('YYYY-MM-DD');
+
+    // Use client-supplied local date to match the check-in record
+    const today = req.body.localDate || moment().format('YYYY-MM-DD');
 
     const record = await Attendance.findOne({ where: { userId, date: today } });
     if (!record?.checkInTime) return error(res, 'Please check in first', 400);
@@ -45,12 +51,13 @@ exports.checkOut = async (req, res, next) => {
 
     const checkOut = new Date();
     const workingHours = moment(checkOut).diff(moment(record.checkInTime), 'hours', true);
+    // present = ≥8h, half_day = 4–8h, short = <4h (still mark present for short days)
     const status = workingHours >= 4 && workingHours < 8 ? 'half_day' : 'present';
 
     const location = { lat: req.body.lat, lng: req.body.lng, ip: req.ip };
     await record.update({ checkOutTime: checkOut, checkOutLocation: location, workingHours, status });
 
-    return success(res, { checkOutTime: checkOut, workingHours: workingHours.toFixed(2) }, 'Checked out successfully');
+    return success(res, { checkOutTime: checkOut, workingHours: workingHours.toFixed(2), date: today }, 'Checked out successfully');
   } catch (err) {
     next(err);
   }
