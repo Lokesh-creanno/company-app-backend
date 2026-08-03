@@ -1,35 +1,43 @@
-const { getRedisClient } = require('../config/redis');
+// In-memory OTP store. Was Redis; that was overkill for 6-digit codes with 10-min TTL.
+// If you ever run multiple backend replicas, switch to Redis then — until then, one Map.
 const logger = require('../utils/logger');
 
-const OTP_EXPIRY = parseInt(process.env.OTP_EXPIRY_MINUTES || '10') * 60;
-const OTP_LENGTH = parseInt(process.env.OTP_LENGTH || '6');
+const OTP_EXPIRY_SEC = parseInt(process.env.OTP_EXPIRY_MINUTES || '10') * 60;
+const OTP_LENGTH     = parseInt(process.env.OTP_LENGTH || '6');
+const TEST_OTP       = '123456';
 
-// In test mode use a fixed OTP so tests are predictable
-const TEST_OTP = '123456';
+const store = new Map(); // key -> { value, expiresAt }
+
+function _get(key) {
+  const e = store.get(key);
+  if (!e) return null;
+  if (Date.now() > e.expiresAt) { store.delete(key); return null; }
+  return e.value;
+}
 
 function generateOTP() {
   if (process.env.USE_MEMORY_OTP === 'true') return TEST_OTP;
-  let otp = '';
-  for (let i = 0; i < OTP_LENGTH; i++) otp += Math.floor(Math.random() * 10);
-  return otp;
+  return String(Math.floor(Math.random() * 10 ** OTP_LENGTH)).padStart(OTP_LENGTH, '0');
 }
 
 async function storeOTP(email, otp) {
-  const redis = await getRedisClient();
-  await redis.setEx(`otp:${email}`, OTP_EXPIRY, otp);
+  store.set(`otp:${email}`, { value: otp, expiresAt: Date.now() + OTP_EXPIRY_SEC * 1000 });
 }
 
 async function verifyOTP(email, otp) {
-  const redis = await getRedisClient();
-  const stored = await redis.get(`otp:${email}`);
+  const stored = _get(`otp:${email}`);
   if (!stored || stored !== otp) return false;
-  await redis.del(`otp:${email}`);
+  store.delete(`otp:${email}`);
   return true;
+}
+
+// Dev/test helper — read raw OTP without deleting it. Used by /api/auth/test-otp
+async function peekOTP(email) {
+  return _get(`otp:${email}`);
 }
 
 async function sendOTPEmail(email, otp, name = '') {
   if (process.env.SMTP_DISABLED === 'true') {
-    // In test/dev mode: print OTP to console instead of sending email
     logger.info(`\n${'═'.repeat(50)}`);
     logger.info(`📧  OTP FOR: ${email}`);
     logger.info(`🔐  OTP CODE: ${otp}`);
@@ -66,4 +74,4 @@ async function sendOTPEmail(email, otp, name = '') {
   logger.info(`OTP sent to ${email}`);
 }
 
-module.exports = { generateOTP, storeOTP, verifyOTP, sendOTPEmail };
+module.exports = { generateOTP, storeOTP, verifyOTP, peekOTP, sendOTPEmail };

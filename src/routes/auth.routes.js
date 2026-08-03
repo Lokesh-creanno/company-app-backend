@@ -13,12 +13,11 @@ router.patch('/fcm-token', authenticate, ctrl.updateFCMToken);
 
 // ── TEST-ONLY endpoint — read OTP from in-memory store ───────────────────────
 if (process.env.NODE_ENV === 'test' || process.env.USE_MEMORY_OTP === 'true') {
+  const { peekOTP } = require('../services/otp.service');
   router.get('/test-otp', async (req, res) => {
-    const { getRedisClient } = require('../config/redis');
     const email = req.query.email;
     if (!email) return res.status(400).json({ success: false, message: 'email required' });
-    const redis = await getRedisClient();
-    const otp = await redis.get(`otp:${email}`);
+    const otp = await peekOTP(email);
     return res.json({ success: true, otp });
   });
 }
