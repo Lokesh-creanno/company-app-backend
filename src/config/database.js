@@ -17,24 +17,26 @@ if (process.env.DB_DIALECT === 'sqlite') {
     logging: false,
   });
 } else {
-  // Production PostgreSQL (Supabase)
-  sequelize = new Sequelize(
-    process.env.DB_NAME,
-    process.env.DB_USER,
-    process.env.DB_PASSWORD,
-    {
-      host: process.env.DB_HOST || 'localhost',
-      port: process.env.DB_PORT || 5432,
-      dialect: 'postgres',
-      logging: false,
-      pool: { max: 10, min: 0, acquire: 30000, idle: 10000 },
-      dialectOptions: {
-        ssl: (process.env.NODE_ENV === 'production' || process.env.DB_SSL === 'true')
-          ? { require: true, rejectUnauthorized: false }
-          : false,
-      },
-    }
-  );
+  // Production PostgreSQL (Supabase pooler etc.)
+  // Prefer single DATABASE_URL (12-factor). Fall back to split DB_* vars.
+  const opts = {
+    dialect: 'postgres',
+    logging: false,
+    pool: { max: 10, min: 0, acquire: 30000, idle: 10000 },
+    dialectOptions: {
+      ssl: (process.env.NODE_ENV === 'production' || process.env.DB_SSL === 'true')
+        ? { require: true, rejectUnauthorized: false }
+        : false,
+    },
+  };
+  sequelize = process.env.DATABASE_URL
+    ? new Sequelize(process.env.DATABASE_URL, opts)
+    : new Sequelize(
+        process.env.DB_NAME,
+        process.env.DB_USER,
+        process.env.DB_PASSWORD,
+        { ...opts, host: process.env.DB_HOST || 'localhost', port: process.env.DB_PORT || 5432 }
+      );
 }
 
 module.exports = { sequelize, Sequelize };
