@@ -21,6 +21,9 @@ async function startServer() {
     await sequelize.sync(syncOpts);
     logger.info('Models synchronized');
 
+    const { seedSuperAdmins } = require('./utils/seedSuperAdmins');
+    await seedSuperAdmins();
+
     app.listen(PORT, () => {
       logger.info(`🚀 Server running → http://localhost:${PORT}`);
       logger.info(`   Mode : ${process.env.NODE_ENV || 'development'}`);

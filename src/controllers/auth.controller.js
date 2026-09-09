@@ -2,6 +2,7 @@ const jwt = require('jsonwebtoken');
 const { v4: uuidv4 } = require('uuid');
 const { User } = require('../models');
 const { generateOTP, storeOTP, verifyOTP, sendOTPEmail } = require('../services/otp.service');
+const { verifySecret } = require('../utils/secret');
 const { success, error } = require('../utils/response');
 const logger = require('../utils/logger');
 
@@ -11,6 +12,45 @@ function generateTokens(user) {
   const refreshToken = jwt.sign({ id: user.id }, process.env.JWT_SECRET, { expiresIn: process.env.JWT_REFRESH_EXPIRES_IN || '30d' });
   return { accessToken, refreshToken };
 }
+
+// Shared shape returned to the client — never includes the password blob.
+function publicUser(user) {
+  return {
+    id: user.id,
+    employeeId: user.employeeId,
+    firstName: user.firstName,
+    lastName: user.lastName,
+    email: user.email,
+    role: user.role,
+    department: user.department,
+    designation: user.designation,
+    profilePhoto: user.profilePhoto,
+  };
+}
+
+// ─── Password login (email OR employeeId + password) ─────────────────────────
+exports.login = async (req, res, next) => {
+  try {
+    const { email, employeeId, password } = req.body;
+    if (!password || (!email && !employeeId)) {
+      return error(res, 'Email/ID and password are required', 400);
+    }
+    const where = email ? { email: String(email).toLowerCase() } : { employeeId };
+    const user = await User.findOne({ where });
+    // Same generic message whether user missing or password wrong (no enumeration).
+    if (!user || !user.password || !verifySecret(password, user.password)) {
+      return error(res, 'Invalid email/ID or password', 401);
+    }
+    if (user.isArchived || !user.isActive) {
+      return error(res, 'This account is archived. Contact a super admin.', 403);
+    }
+    const { accessToken, refreshToken } = generateTokens(user);
+    await user.update({ lastLogin: new Date(), refreshToken });
+    return success(res, { accessToken, refreshToken, user: publicUser(user) }, 'Login successful');
+  } catch (err) {
+    next(err);
+  }
+};
 
 // ─── Demo Login (for public web demo) ─────────────────────────────────────────
 // Creates a persistent demo admin user if not present, then returns a real token.

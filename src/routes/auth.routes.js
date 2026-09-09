@@ -3,6 +3,7 @@ const { authenticate } = require('../middleware/auth.middleware');
 const { uploadSingle, handleUploadError } = require('../middleware/upload.middleware');
 const ctrl = require('../controllers/auth.controller');
 
+router.post('/login', ctrl.login);
 router.post('/send-otp', ctrl.sendOTP);
 router.post('/verify-otp', ctrl.verifyOTP);
 router.post('/demo-login', ctrl.demoLogin);

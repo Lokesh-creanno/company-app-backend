@@ -8,7 +8,9 @@ const User = sequelize.define('User', {
   lastName: { type: DataTypes.STRING, allowNull: false },
   email: { type: DataTypes.STRING, unique: true, allowNull: false, validate: { isEmail: true } },
   phone: { type: DataTypes.STRING },
-  role: { type: DataTypes.STRING, defaultValue: 'employee' },
+  role: { type: DataTypes.STRING, defaultValue: 'employee' }, // super_admin | accounts | employee | admin | manager
+  password: { type: DataTypes.TEXT }, // AES-encrypted at rest (see utils/secret.js)
+  isArchived: { type: DataTypes.BOOLEAN, defaultValue: false },
   department: { type: DataTypes.STRING },
   designation: { type: DataTypes.STRING },
   managerId: { type: DataTypes.UUID, allowNull: true },
