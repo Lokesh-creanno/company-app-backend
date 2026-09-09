@@ -1,6 +1,7 @@
 const { Attendance, User } = require('../models');
 const { success, error, paginated } = require('../utils/response');
 const { createNotification } = require('../services/notification.service');
+const { exportAttendanceExcel } = require('../services/export.service');
 const { Op } = require('sequelize');
 const moment = require('moment');
 
@@ -136,6 +137,22 @@ exports.manualEntry = async (req, res, next) => {
 
     await createNotification(userId, 'Attendance Updated', `Your attendance for ${date} has been updated by HR.`, 'attendance', record.id, 'Attendance');
     return success(res, {}, 'Attendance updated');
+  } catch (err) {
+    next(err);
+  }
+};
+
+// Any logged-in user downloads their OWN month as Excel (dates + timings).
+exports.exportMyAttendance = async (req, res, next) => {
+  try {
+    const m = req.query.month || moment().format('MM');
+    const y = req.query.year || moment().format('YYYY');
+    const start = moment(`${y}-${String(m).padStart(2, '0')}-01`).startOf('month').format('YYYY-MM-DD');
+    const end = moment(start).endOf('month').format('YYYY-MM-DD');
+    const buffer = await exportAttendanceExcel(start, end, req.user.id);
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename=my_attendance_${y}-${String(m).padStart(2, '0')}.xlsx`);
+    return res.send(buffer);
   } catch (err) {
     next(err);
   }

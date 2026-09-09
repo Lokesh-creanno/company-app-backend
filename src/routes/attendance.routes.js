@@ -7,6 +7,7 @@ router.use(authenticate);
 router.post('/check-in', ctrl.checkIn);
 router.post('/check-out', ctrl.checkOut);
 router.get('/my', ctrl.getMyAttendance);
+router.get('/my/export', ctrl.exportMyAttendance);
 router.get('/team', authorize('admin', 'manager'), ctrl.getTeamAttendance);
 router.post('/manual', authorize('admin', 'manager'), ctrl.manualEntry);
 router.get('/report', authorize('admin', 'manager'), ctrl.getAttendanceReport);
