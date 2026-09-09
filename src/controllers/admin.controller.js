@@ -5,6 +5,14 @@ const { success, error } = require('../utils/response');
 // Roles a super admin is allowed to assign. super_admin is intentionally NOT
 // creatable through the normal create form — seed those deliberately.
 const ASSIGNABLE_ROLES = ['accounts', 'employee', 'admin', 'manager'];
+const MIN_PASSWORD_LEN = 6;
+
+// True if another (non-archived) Accounts user exists, excluding `exceptId`.
+async function accountsTaken(exceptId) {
+  const where = { role: 'accounts', isArchived: false };
+  const existing = await User.findOne({ where });
+  return existing && existing.id !== exceptId;
+}
 
 function adminView(u) {
   return {
@@ -44,6 +52,9 @@ exports.createUser = async (req, res, next) => {
     if (!firstName || !lastName || !email || !password) {
       return error(res, 'firstName, lastName, email and password are required', 400);
     }
+    if (String(password).length < MIN_PASSWORD_LEN) {
+      return error(res, `Password must be at least ${MIN_PASSWORD_LEN} characters`, 400);
+    }
     const roleToSet = role || 'employee';
     if (!ASSIGNABLE_ROLES.includes(roleToSet)) {
       return error(res, `role must be one of: ${ASSIGNABLE_ROLES.join(', ')}`, 400);
@@ -53,9 +64,8 @@ exports.createUser = async (req, res, next) => {
       return error(res, 'A user with this email already exists', 409);
     }
     // Only one ACCOUNTS user allowed (stage 1 rule).
-    if (roleToSet === 'accounts') {
-      const existing = await User.findOne({ where: { role: 'accounts', isArchived: false } });
-      if (existing) return error(res, 'An Accounts user already exists. Archive it first.', 409);
+    if (roleToSet === 'accounts' && await accountsTaken(null)) {
+      return error(res, 'An Accounts user already exists. Archive it first.', 409);
     }
     const empId = employeeId || `EMP-${Date.now().toString(36).toUpperCase()}`;
     if (await User.findOne({ where: { employeeId: empId } })) {
@@ -96,9 +106,18 @@ exports.updateUser = async (req, res, next) => {
       if (!ASSIGNABLE_ROLES.includes(role)) {
         return error(res, `role must be one of: ${ASSIGNABLE_ROLES.join(', ')}`, 400);
       }
+      // Changing someone INTO accounts must respect the single-Accounts rule.
+      if (role === 'accounts' && user.role !== 'accounts' && await accountsTaken(user.id)) {
+        return error(res, 'An Accounts user already exists. Archive it first.', 409);
+      }
       patch.role = role;
     }
-    if (password) patch.password = encryptSecret(password); // reset password
+    if (password) {
+      if (String(password).length < MIN_PASSWORD_LEN) {
+        return error(res, `Password must be at least ${MIN_PASSWORD_LEN} characters`, 400);
+      }
+      patch.password = encryptSecret(password); // reset password
+    }
 
     await user.update(patch);
     return success(res, adminView(user), 'User updated');
