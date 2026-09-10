@@ -29,38 +29,67 @@ async function exportAttendanceExcel(startDate, endDate, userId = null) {
     'Check Out': r.checkOutTime ? moment(r.checkOutTime).format('HH:mm') : '-',
     'Working Hours': r.workingHours?.toFixed(2) || '0',
     'Status': r.status,
+    'Mode': r.mode || 'office',
+    'Late': r.isLate ? 'Late' : (r.checkInTime ? 'On-time' : ''),
   }));
 
   const wb = XLSX.utils.book_new();
   const ws = XLSX.utils.json_to_sheet(rows);
-  ws['!cols'] = [{ wch: 12 }, { wch: 25 }, { wch: 20 }, { wch: 12 }, { wch: 10 }, { wch: 10 }, { wch: 14 }, { wch: 12 }];
+  ws['!cols'] = [{ wch: 12 }, { wch: 25 }, { wch: 20 }, { wch: 12 }, { wch: 10 }, { wch: 10 }, { wch: 14 }, { wch: 12 }, { wch: 8 }, { wch: 9 }];
   XLSX.utils.book_append_sheet(wb, ws, 'Attendance');
   return XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
 }
 
 async function exportReimbursementExcel(startDate, endDate) {
+  const where = {};
+  if (startDate && endDate) where.createdAt = { [Op.between]: [startDate, endDate] };
+
   const records = await Reimbursement.findAll({
-    where: { createdAt: { [Op.between]: [startDate, endDate] } },
+    where,
     include: [{ model: User, as: 'employee', attributes: ['employeeId', 'firstName', 'lastName', 'department'] }],
     order: [['createdAt', 'DESC']],
   });
 
-  const rows = records.map(r => ({
+  // Sheet 1 — one row per claim (summary + approval trail).
+  const claimRows = records.map(r => ({
     'Employee ID': r.employee?.employeeId,
-    'Name': `${r.employee?.firstName} ${r.employee?.lastName}`,
+    'Name': `${r.employee?.firstName || ''} ${r.employee?.lastName || ''}`.trim(),
     'Department': r.employee?.department,
     'Title': r.title,
-    'Category': r.category,
-    'Amount (₹)': r.amount,
-    'Expense Date': r.expenseDate,
+    'Total (₹)': Number(r.amount),
+    'Lines': (r.items || []).length,
     'Status': r.status,
     'Submitted On': moment(r.createdAt).format('YYYY-MM-DD'),
+    'Accounts At': r.accountsAt ? moment(r.accountsAt).format('YYYY-MM-DD HH:mm') : '',
+    'Accounts Remark': r.accountsRemark || '',
+    'Approved At': r.approvedAt ? moment(r.approvedAt).format('YYYY-MM-DD HH:mm') : '',
+    'Super Admin Remark': r.superAdminRemark || '',
+    'Rejection/Sent-back': r.rejectionReason || r.sentBackReason || '',
   }));
 
+  // Sheet 2 — one row per line item (matches the reference sheet columns).
+  const itemRows = [];
+  records.forEach(r => (r.items || []).forEach(it => itemRows.push({
+    'Name': `${r.employee?.firstName || ''} ${r.employee?.lastName || ''}`.trim(),
+    'Department': r.employee?.department,
+    'Claim': r.title,
+    'Date': (it.date || '').toString().slice(0, 10),
+    'Category': it.category || '',
+    'Expense Head': it.expenseHead || '',
+    'Remarks': it.remarks || '',
+    'Amount (₹)': Number(it.amount) || 0,
+    'Claim Status': r.status,
+  })));
+
   const wb = XLSX.utils.book_new();
-  const ws = XLSX.utils.json_to_sheet(rows);
-  ws['!cols'] = [{ wch: 12 }, { wch: 25 }, { wch: 18 }, { wch: 30 }, { wch: 16 }, { wch: 12 }, { wch: 14 }, { wch: 14 }, { wch: 14 }];
-  XLSX.utils.book_append_sheet(wb, ws, 'Reimbursements');
+  const wsClaims = XLSX.utils.json_to_sheet(claimRows);
+  wsClaims['!cols'] = [{ wch: 12 }, { wch: 22 }, { wch: 16 }, { wch: 26 }, { wch: 12 }, { wch: 7 }, { wch: 16 }, { wch: 14 }, { wch: 18 }, { wch: 24 }, { wch: 18 }, { wch: 24 }, { wch: 24 }];
+  XLSX.utils.book_append_sheet(wb, wsClaims, 'Claims');
+
+  const wsItems = XLSX.utils.json_to_sheet(itemRows.length ? itemRows : [{ Name: 'No line items' }]);
+  wsItems['!cols'] = [{ wch: 22 }, { wch: 16 }, { wch: 24 }, { wch: 12 }, { wch: 16 }, { wch: 22 }, { wch: 28 }, { wch: 12 }, { wch: 14 }];
+  XLSX.utils.book_append_sheet(wb, wsItems, 'Line Items');
+
   return XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
 }
 

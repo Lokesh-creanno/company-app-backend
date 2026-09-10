@@ -4,6 +4,7 @@ const Task = require('./Task');
 const Reimbursement = require('./Reimbursement');
 const Document = require('./Document');
 const Notification = require('./Notification');
+const Setting = require('./Setting');
 
 // User self-reference (manager)
 User.hasMany(User, { foreignKey: 'managerId', as: 'reportees' });
@@ -32,4 +33,4 @@ Document.belongsTo(User, { foreignKey: 'userId', as: 'owner' });
 User.hasMany(Notification, { foreignKey: 'userId' });
 Notification.belongsTo(User, { foreignKey: 'userId' });
 
-module.exports = { User, Attendance, Task, Reimbursement, Document, Notification };
+module.exports = { User, Attendance, Task, Reimbursement, Document, Notification, Setting };

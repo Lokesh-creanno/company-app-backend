@@ -18,6 +18,8 @@ const Attendance = sequelize.define('Attendance', {
     set(val) { this.setDataValue('checkOutLocation', val ? JSON.stringify(val) : null); },
   },
   status: { type: DataTypes.STRING, defaultValue: 'absent' },
+  mode: { type: DataTypes.STRING, defaultValue: 'office' }, // 'office' | 'field'
+  isLate: { type: DataTypes.BOOLEAN, defaultValue: false },
   workingHours: { type: DataTypes.FLOAT },
   notes: { type: DataTypes.TEXT },
   isManualEntry: { type: DataTypes.BOOLEAN, defaultValue: false },

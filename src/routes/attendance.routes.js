@@ -4,6 +4,8 @@ const ctrl = require('../controllers/attendance.controller');
 
 router.use(authenticate);
 
+router.get('/office-config', ctrl.getOfficeConfig);
+router.put('/office-config', authorize('super_admin'), ctrl.setOfficeConfig);
 router.post('/check-in', ctrl.checkIn);
 router.post('/check-out', ctrl.checkOut);
 router.get('/my', ctrl.getMyAttendance);

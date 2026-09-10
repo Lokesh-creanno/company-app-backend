@@ -4,7 +4,7 @@ const { exportAttendanceExcel, exportReimbursementExcel, generateAttendancePDF }
 const { Attendance } = require('../models');
 const { Op } = require('sequelize');
 
-router.use(authenticate, authorize('admin', 'manager'));
+router.use(authenticate, authorize('admin', 'manager', 'accounts', 'super_admin'));
 
 // GET /api/export/attendance?startDate=&endDate=&format=excel|pdf
 router.get('/attendance', async (req, res, next) => {
@@ -34,12 +34,11 @@ router.get('/attendance', async (req, res, next) => {
 // GET /api/export/reimbursements?startDate=&endDate=
 router.get('/reimbursements', async (req, res, next) => {
   try {
-    const { startDate, endDate } = req.query;
-    if (!startDate || !endDate) return res.status(400).json({ success: false, message: 'startDate and endDate required' });
-
+    const { startDate, endDate } = req.query; // optional — omit to export all
     const buffer = await exportReimbursementExcel(startDate, endDate);
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    res.setHeader('Content-Disposition', `attachment; filename=reimbursements_${startDate}_${endDate}.xlsx`);
+    const tag = startDate && endDate ? `${startDate}_${endDate}` : 'all';
+    res.setHeader('Content-Disposition', `attachment; filename=reimbursements_${tag}.xlsx`);
     return res.send(buffer);
   } catch (err) { next(err); }
 });
