@@ -16,6 +16,7 @@ const documentRoutes = require('./routes/document.routes');
 const dashboardRoutes = require('./routes/dashboard.routes');
 const notificationRoutes = require('./routes/notification.routes');
 const exportRoutes = require('./routes/export.routes');
+const fileRoutes = require('./routes/file.routes');
 
 const errorHandler = require('./middleware/error.middleware');
 const logger = require('./utils/logger');
@@ -95,6 +96,7 @@ app.use('/api/documents', documentRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/export', exportRoutes);
+app.use('/api/files', fileRoutes);
 
 // 404
 app.use('*', (req, res) => {

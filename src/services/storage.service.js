@@ -13,7 +13,8 @@ async function uploadFileLocal(buffer, originalName, folder = 'documents') {
   const filePath = path.join(dir, filename);
   fs.writeFileSync(filePath, buffer);
   const key = `${folder}/${filename}`;
-  return { key, url: `/uploads/${key}` };
+  // Served by the authenticated /api/files route (never public).
+  return { key, url: `/api/files/${key}` };
 }
 
 async function deleteFileLocal(key) {
