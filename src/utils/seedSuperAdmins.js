@@ -1,27 +1,55 @@
+const crypto = require('crypto');
 const { User } = require('../models');
 const { encryptSecret } = require('./secret');
 const logger = require('./logger');
 
-// Two stage-1 super admins. Credentials come from env if set, else test defaults.
-// Runs every startup and re-encrypts the configured password with the CURRENT
-// server key, so a key/password change self-heals on the next deploy.
+const isProd = process.env.NODE_ENV === 'production';
+
+// SECURITY: this repo is public, so a hardcoded default password would be a
+// publicly known super-admin login. In production we REQUIRE the password to
+// come from the environment; if it is missing we generate a strong random one
+// and print it once to the server log instead of falling back to a known value.
+function resolvePassword(envValue, envName) {
+  if (envValue) return { password: envValue, generated: false };
+  if (!isProd) return { password: 'Creanno@123', generated: false }; // local dev only
+  const password = crypto.randomBytes(12).toString('base64url');
+  logger.warn(
+    `[SECURITY] ${envName} is not set. Generated a one-time random password for ` +
+    `this super admin: ${password}  — set ${envName} in the environment and ` +
+    `change this password after signing in.`,
+  );
+  return { password, generated: true };
+}
+
 const SUPER_ADMINS = [
   {
     email: (process.env.SUPER_ADMIN_1_EMAIL || 'superadmin1@creanno.com').toLowerCase(),
-    password: process.env.SUPER_ADMIN_1_PASSWORD || 'Creanno@123',
+    envName: 'SUPER_ADMIN_1_PASSWORD',
+    envValue: process.env.SUPER_ADMIN_1_PASSWORD,
     firstName: 'Super', lastName: 'Admin One', employeeId: 'SA-001',
   },
   {
     email: (process.env.SUPER_ADMIN_2_EMAIL || 'superadmin2@creanno.com').toLowerCase(),
-    password: process.env.SUPER_ADMIN_2_PASSWORD || 'Creanno@123',
+    envName: 'SUPER_ADMIN_2_PASSWORD',
+    envValue: process.env.SUPER_ADMIN_2_PASSWORD,
     firstName: 'Super', lastName: 'Admin Two', employeeId: 'SA-002',
   },
 ];
 
 async function seedSuperAdmins() {
   for (const sa of SUPER_ADMINS) {
-    const enc = encryptSecret(sa.password);
     const existing = await User.findOne({ where: { email: sa.email } });
+
+    // In production, never overwrite an existing super admin's password with a
+    // freshly generated one — that would silently lock them out each restart.
+    if (existing && isProd && !sa.envValue) {
+      await existing.update({ role: 'super_admin', isActive: true, isArchived: false });
+      continue;
+    }
+
+    const { password } = resolvePassword(sa.envValue, sa.envName);
+    const enc = encryptSecret(password);
+
     if (existing) {
       await existing.update({
         role: 'super_admin', isActive: true, isArchived: false, password: enc,

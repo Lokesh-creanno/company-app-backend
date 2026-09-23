@@ -1,26 +1,28 @@
 const router = require('express').Router();
+const rateLimit = require('express-rate-limit');
 const { authenticate } = require('../middleware/auth.middleware');
-const { uploadSingle, handleUploadError } = require('../middleware/upload.middleware');
 const ctrl = require('../controllers/auth.controller');
 
-router.post('/login', ctrl.login);
-router.post('/send-otp', ctrl.sendOTP);
-router.post('/verify-otp', ctrl.verifyOTP);
-router.post('/demo-login', ctrl.demoLogin);
+// Strict brute-force guard on password login. Applied in ALL environments —
+// the global /api limiter (100/15min) is far too loose for password guessing.
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, message: 'Too many login attempts. Try again in 15 minutes.' },
+});
+
+router.post('/login', loginLimiter, ctrl.login);
 router.post('/refresh-token', ctrl.refreshToken);
 router.post('/logout', authenticate, ctrl.logout);
 router.get('/me', authenticate, ctrl.me);
 router.patch('/fcm-token', authenticate, ctrl.updateFCMToken);
 
-// ── TEST-ONLY endpoint — read OTP from in-memory store ───────────────────────
-if (process.env.NODE_ENV === 'test' || process.env.USE_MEMORY_OTP === 'true') {
-  const { peekOTP } = require('../services/otp.service');
-  router.get('/test-otp', async (req, res) => {
-    const email = req.query.email;
-    if (!email) return res.status(400).json({ success: false, message: 'email required' });
-    const otp = await peekOTP(email);
-    return res.json({ success: true, otp });
-  });
-}
+// REMOVED (security):
+//  - POST /demo-login   : handed out an ADMIN token with no authentication.
+//  - POST /send-otp, /verify-otp : OTP login retired in favour of passwords.
+//  - GET  /test-otp     : leaked OTP codes whenever USE_MEMORY_OTP=true
+//                         (which is set in production).
 
 module.exports = router;

@@ -32,8 +32,21 @@ app.use(helmet.contentSecurityPolicy({
 }));
 
 // CORS
+// CORS: a wildcard origin together with credentials is unsafe, so in production
+// we require an explicit allow-list (comma-separated FRONTEND_URL). Native apps
+// send no Origin header, so requests without one are still allowed.
+const allowedOrigins = (process.env.FRONTEND_URL || '')
+  .split(',').map(s => s.trim()).filter(s => s && s !== '*');
+
 app.use(cors({
-  origin: process.env.FRONTEND_URL || '*',
+  origin: (origin, cb) => {
+    if (!origin) return cb(null, true);                 // mobile app / curl
+    if (allowedOrigins.length === 0) {
+      // No allow-list configured: permissive off-production only.
+      return cb(null, process.env.NODE_ENV !== 'production');
+    }
+    return cb(null, allowedOrigins.includes(origin));
+  },
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
   allowedHeaders: ['Content-Type', 'Authorization'],
   credentials: true,
