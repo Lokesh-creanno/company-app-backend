@@ -28,7 +28,7 @@ exports.getAllEmployees = async (req, res, next) => {
 
     const { count, rows } = await User.findAndCountAll({
       where,
-      attributes: { exclude: ['refreshToken', 'fcmToken'] },
+      attributes: { exclude: ['password', 'refreshToken', 'fcmToken'] },
       include: [{ model: User, as: 'manager', attributes: ['id', 'firstName', 'lastName', 'email'] }],
       limit: parseInt(limit),
       offset: parseInt(offset),
@@ -45,7 +45,7 @@ exports.getEmployee = async (req, res, next) => {
   try {
     const { id } = req.params;
     const user = await User.findByPk(id, {
-      attributes: { exclude: ['refreshToken', 'fcmToken'] },
+      attributes: { exclude: ['password', 'refreshToken', 'fcmToken'] },
       include: [
         { model: User, as: 'manager', attributes: ['id', 'firstName', 'lastName', 'email'] },
         { model: User, as: 'reportees', attributes: ['id', 'firstName', 'lastName', 'designation'] },

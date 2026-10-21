@@ -7,9 +7,9 @@ router.use(authenticate);
 
 router.post('/', uploadSingle('file'), handleUploadError, ctrl.uploadDocument);
 router.get('/my', ctrl.getMyDocuments);
-router.get('/employee/:userId', authorize('admin', 'manager'), ctrl.getEmployeeDocuments);
+router.get('/employee/:userId', authorize('super_admin', 'admin', 'manager'), ctrl.getEmployeeDocuments);
 router.get('/:id/download', ctrl.getDocumentDownloadUrl);
 router.delete('/:id', ctrl.deleteDocument);
-router.patch('/:id/verify', authorize('admin'), ctrl.verifyDocument);
+router.patch('/:id/verify', authorize('super_admin', 'admin'), ctrl.verifyDocument);
 
 module.exports = router;

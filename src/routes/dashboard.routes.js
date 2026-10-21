@@ -5,6 +5,6 @@ const ctrl = require('../controllers/dashboard.controller');
 router.use(authenticate);
 
 router.get('/me', ctrl.getEmployeeDashboard);
-router.get('/admin', authorize('admin', 'manager'), ctrl.getAdminDashboard);
+router.get('/admin', authorize('super_admin', 'admin', 'manager'), ctrl.getAdminDashboard);
 
 module.exports = router;

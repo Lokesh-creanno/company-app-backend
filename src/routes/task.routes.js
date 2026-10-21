@@ -4,9 +4,9 @@ const ctrl = require('../controllers/task.controller');
 
 router.use(authenticate);
 
-router.post('/', authorize('admin', 'manager'), ctrl.createTask);
+router.post('/', authorize('super_admin', 'admin', 'manager'), ctrl.createTask);
 router.get('/my', ctrl.getMyTasks);
-router.get('/assigned', authorize('admin', 'manager'), ctrl.getAssignedTasks);
+router.get('/assigned', authorize('super_admin', 'admin', 'manager'), ctrl.getAssignedTasks);
 router.get('/:id', ctrl.getTask);
 router.patch('/:id/status', ctrl.updateTaskStatus);
 router.post('/:id/comments', ctrl.addComment);
