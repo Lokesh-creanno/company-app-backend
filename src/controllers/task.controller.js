@@ -57,7 +57,9 @@ exports.getAssignedTasks = async (req, res, next) => {
     const { status, assignedTo, page = 1, limit = 20 } = req.query;
     const offset = (page - 1) * limit;
 
-    const where = { assignedBy: req.user.id };
+    // A super admin oversees everyone, so they see every task; everybody else
+    // sees only the tasks they handed out.
+    const where = req.user.role === 'super_admin' ? {} : { assignedBy: req.user.id };
     if (status) where.status = status;
     if (assignedTo) where.assignedTo = assignedTo;
 

@@ -140,7 +140,11 @@ exports.accountsAction = async (req, res, next) => {
     const { action, remark } = req.body;
     const r = await Reimbursement.findByPk(req.params.id);
     if (!r) return error(res, 'Not found', 404);
-    if (r.status !== 'pending_accounts') return error(res, 'Claim is not awaiting Accounts', 400);
+    // 'pending' is the status claims carried before the two-stage flow existed.
+    // Without it those older claims can never be approved or rejected.
+    if (!['pending_accounts', 'pending'].includes(r.status)) {
+      return error(res, 'Claim is not awaiting Accounts', 400);
+    }
 
     if (action === 'approve') {
       await r.update({
