@@ -8,6 +8,12 @@ const { Attendance, User, Task, Reimbursement } = require('../models');
 const { Op } = require('sequelize');
 const moment = require('moment');
 
+// Stored JSON columns come back as objects on Postgres and as strings on
+// SQLite, and old rows may hold anything at all — never let a report crash.
+function safeParse(s) {
+  try { return JSON.parse(s); } catch (_) { return null; }
+}
+
 // ─── Excel Exports ────────────────────────────────────────────────────────────
 
 async function exportAttendanceExcel(startDate, endDate, userId = null) {
@@ -20,22 +26,42 @@ async function exportAttendanceExcel(startDate, endDate, userId = null) {
     order: [['date', 'ASC']],
   });
 
+  // checkInLocation is stored as JSON {lat, lng, ip, note}; show it as something
+  // a person can paste into a map, plus whatever note the member typed.
+  const place = (loc) => {
+    if (!loc) return '';
+    const o = typeof loc === 'string' ? safeParse(loc) : loc;
+    if (!o) return '';
+    return o.lat != null && o.lng != null
+      ? `${Number(o.lat).toFixed(6)}, ${Number(o.lng).toFixed(6)}`
+      : '';
+  };
+  const placeNote = (loc) => {
+    const o = typeof loc === 'string' ? safeParse(loc) : loc;
+    return o?.note || '';
+  };
+
   const rows = records.map(r => ({
     'Employee ID': r.employee?.employeeId,
     'Name': `${r.employee?.firstName} ${r.employee?.lastName}`,
     'Department': r.employee?.department,
     'Date': r.date,
+    'Day': moment(r.date).format('ddd'),
     'Check In': r.checkInTime ? moment(r.checkInTime).format('HH:mm') : '-',
     'Check Out': r.checkOutTime ? moment(r.checkOutTime).format('HH:mm') : '-',
     'Working Hours': r.workingHours?.toFixed(2) || '0',
     'Status': r.status,
-    'Mode': r.mode || 'office',
+    'Mode': r.mode === 'field' ? 'Field' : 'Office',
     'Late': r.isLate ? 'Late' : (r.checkInTime ? 'On-time' : ''),
+    'Check In Location': place(r.checkInLocation),
+    'Check Out Location': place(r.checkOutLocation),
+    'Place Note': placeNote(r.checkInLocation),
   }));
 
   const wb = XLSX.utils.book_new();
   const ws = XLSX.utils.json_to_sheet(rows);
-  ws['!cols'] = [{ wch: 12 }, { wch: 25 }, { wch: 20 }, { wch: 12 }, { wch: 10 }, { wch: 10 }, { wch: 14 }, { wch: 12 }, { wch: 8 }, { wch: 9 }];
+  ws['!cols'] = [{ wch: 12 }, { wch: 25 }, { wch: 18 }, { wch: 12 }, { wch: 6 }, { wch: 10 },
+    { wch: 10 }, { wch: 14 }, { wch: 10 }, { wch: 8 }, { wch: 9 }, { wch: 24 }, { wch: 24 }, { wch: 22 }];
   XLSX.utils.book_append_sheet(wb, ws, 'Attendance');
   return XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
 }
