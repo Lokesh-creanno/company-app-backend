@@ -6,7 +6,7 @@ const ctrl = require('../controllers/reimbursement.controller');
 router.use(authenticate);
 
 // Member
-router.post('/', uploadMultiple('bills', 10), handleUploadError, ctrl.submitReimbursement);
+router.post('/', uploadMultiple('bills', 10, 'bills'), handleUploadError, ctrl.submitReimbursement);
 router.post('/:id/resubmit', ctrl.resubmitReimbursement);
 router.get('/my', ctrl.getMyReimbursements);
 
