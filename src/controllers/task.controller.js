@@ -100,7 +100,7 @@ exports.updateTaskStatus = async (req, res, next) => {
 
     const task = await Task.findByPk(id);
     if (!task) return error(res, 'Task not found', 404);
-    if (task.assignedTo !== req.user.id && !['admin', 'manager'].includes(req.user.role)) {
+    if (task.assignedTo !== req.user.id && !['super_admin', 'admin', 'manager'].includes(req.user.role)) {
       return error(res, 'Unauthorized', 403);
     }
 
