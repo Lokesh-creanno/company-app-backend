@@ -14,6 +14,13 @@ function safeParse(s) {
   try { return JSON.parse(s); } catch (_) { return null; }
 }
 
+// Times are stored in UTC and the server runs in UTC, so formatting them
+// straight gave UTC in the reports — a 10:14 check-in printed as 04:44. Shift
+// to the company's own clock (India by default, override with
+// REPORT_UTC_OFFSET_MINUTES) so a sheet reads the same as the app.
+const REPORT_OFFSET_MINUTES = Number(process.env.REPORT_UTC_OFFSET_MINUTES ?? 330);
+const atLocal = (value) => moment(value).utcOffset(REPORT_OFFSET_MINUTES);
+
 // ─── Excel Exports ────────────────────────────────────────────────────────────
 
 async function exportAttendanceExcel(startDate, endDate, userId = null) {
@@ -46,9 +53,9 @@ async function exportAttendanceExcel(startDate, endDate, userId = null) {
     'Name': `${r.employee?.firstName} ${r.employee?.lastName}`,
     'Department': r.employee?.department,
     'Date': r.date,
-    'Day': moment(r.date).format('ddd'),
-    'Check In': r.checkInTime ? moment(r.checkInTime).format('HH:mm') : '-',
-    'Check Out': r.checkOutTime ? moment(r.checkOutTime).format('HH:mm') : '-',
+    'Day': moment(r.date, 'YYYY-MM-DD').format('ddd'),
+    'Check In': r.checkInTime ? atLocal(r.checkInTime).format('HH:mm') : '-',
+    'Check Out': r.checkOutTime ? atLocal(r.checkOutTime).format('HH:mm') : '-',
     'Working Hours': r.workingHours?.toFixed(2) || '0',
     'Status': r.status,
     'Mode': r.mode === 'field' ? 'Field' : 'Office',
@@ -85,10 +92,10 @@ async function exportReimbursementExcel(startDate, endDate) {
     'Total (₹)': Number(r.amount),
     'Lines': (r.items || []).length,
     'Status': r.status,
-    'Submitted On': moment(r.createdAt).format('YYYY-MM-DD'),
-    'Accounts At': r.accountsAt ? moment(r.accountsAt).format('YYYY-MM-DD HH:mm') : '',
+    'Submitted On': atLocal(r.createdAt).format('YYYY-MM-DD'),
+    'Accounts At': r.accountsAt ? atLocal(r.accountsAt).format('YYYY-MM-DD HH:mm') : '',
     'Accounts Remark': r.accountsRemark || '',
-    'Approved At': r.approvedAt ? moment(r.approvedAt).format('YYYY-MM-DD HH:mm') : '',
+    'Approved At': r.approvedAt ? atLocal(r.approvedAt).format('YYYY-MM-DD HH:mm') : '',
     'Super Admin Remark': r.superAdminRemark || '',
     'Rejection/Sent-back': r.rejectionReason || r.sentBackReason || '',
   }));
@@ -155,8 +162,8 @@ function generateAttendancePDF(records, options = {}) {
       const vals = [
         r.employee?.employeeId || '', `${r.employee?.firstName || ''} ${r.employee?.lastName || ''}`,
         r.employee?.department || '', r.date || '',
-        r.checkInTime ? moment(r.checkInTime).format('HH:mm') : '-',
-        r.checkOutTime ? moment(r.checkOutTime).format('HH:mm') : '-',
+        r.checkInTime ? atLocal(r.checkInTime).format('HH:mm') : '-',
+        r.checkOutTime ? atLocal(r.checkOutTime).format('HH:mm') : '-',
         r.workingHours?.toFixed(2) || '0', r.status || '',
       ];
       vals.forEach((v, i) => doc.text(v, cols[i], doc.y, { width: 90, ellipsis: true }));
