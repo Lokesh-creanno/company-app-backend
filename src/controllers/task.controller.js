@@ -151,7 +151,12 @@ exports.deleteTask = async (req, res, next) => {
     const { id } = req.params;
     const task = await Task.findByPk(id);
     if (!task) return error(res, 'Task not found', 404);
-    if (task.assignedBy !== req.user.id && req.user.role !== 'admin') return error(res, 'Unauthorized', 403);
+    // A super admin owns every task in the company, so they can remove one
+    // they did not create — otherwise old tasks can never be cleared.
+    if (task.assignedBy !== req.user.id &&
+        !['super_admin', 'admin'].includes(req.user.role)) {
+      return error(res, 'Unauthorized', 403);
+    }
     await task.destroy();
     return success(res, {}, 'Task deleted');
   } catch (err) {
