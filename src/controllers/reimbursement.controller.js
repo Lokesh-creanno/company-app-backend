@@ -266,3 +266,18 @@ exports.markAsPaid = async (req, res, next) => {
     return success(res, decorate(r), 'Marked as paid');
   } catch (err) { next(err); }
 };
+
+// DELETE /api/reimbursements/:id — super admin only, for clearing out test or
+// mistaken claims. Permanent: there is no undo, so the route is locked to the
+// one role that owns the data.
+exports.deleteReimbursement = async (req, res, next) => {
+  try {
+    const r = await Reimbursement.findByPk(req.params.id);
+    if (!r) return error(res, 'Not found', 404);
+    const label = `${r.title} (₹${r.amount})`;
+    await r.destroy();
+    return success(res, { id: req.params.id }, `Deleted ${label}`);
+  } catch (err) {
+    next(err);
+  }
+};

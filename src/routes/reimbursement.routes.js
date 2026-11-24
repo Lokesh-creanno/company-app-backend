@@ -18,6 +18,9 @@ router.patch('/:id/accounts', authorize('accounts', 'super_admin'), ctrl.account
 router.patch('/:id/superadmin', authorize('super_admin'), ctrl.superAdminAction);
 router.patch('/:id/paid', authorize('accounts', 'super_admin'), ctrl.markAsPaid);
 
+// Remove a claim entirely — super admin only, and it cannot be undone.
+router.delete('/:id', authorize('super_admin'), ctrl.deleteReimbursement);
+
 // Single (member sees own; accounts/super_admin see any)
 router.get('/:id', ctrl.getReimbursement);
 

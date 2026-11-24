@@ -6,10 +6,14 @@ const { v4: uuidv4 } = require('uuid');
 
 exports.getAllEmployees = async (req, res, next) => {
   try {
-    const { page = 1, limit = 20, search, department, role, isActive } = req.query;
+    const { page = 1, limit = 20, search, department, role, isActive,
+            includeArchived } = req.query;
     const offset = (page - 1) * limit;
 
-    const where = {};
+    // Archived people have had their access taken away, so they must not turn
+    // up anywhere a person is picked — assigning a task to one was possible
+    // until now. Pass includeArchived=true to see them on purpose.
+    const where = includeArchived === 'true' ? {} : { isArchived: { [Op.not]: true } };
     if (search) {
       const likeOp = process.env.DB_DIALECT === 'sqlite' ? Op.like : Op.iLike;
       where[Op.or] = [
