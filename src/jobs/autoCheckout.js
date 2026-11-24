@@ -14,12 +14,18 @@
  */
 const { Op } = require('sequelize');
 const { Attendance } = require('../models');
+const { createNotification } = require('../services/notification.service');
 const logger = require('../utils/logger');
 
 // Company clock. The server runs in UTC; India is +5:30.
 const OFFSET_MINUTES = Number(process.env.REPORT_UTC_OFFSET_MINUTES ?? 330);
-// "HH:mm" in company time. 18:30 = 6:30 pm.
+// "HH:mm" in company time. 18:30 = 6:30 pm: the end of the working day, and
+// the time a day is recorded as ending.
 const CUTOFF = String(process.env.AUTO_CHECKOUT_TIME || '18:30');
+// People are asked to check out themselves first, and only what is still open
+// after the grace period is closed for them. The recorded time is the cut-off
+// either way, so the hours are the same.
+const GRACE_MINUTES = Number(process.env.AUTO_CHECKOUT_GRACE_MINUTES ?? 60);
 const CHECK_EVERY_MS = 5 * 60 * 1000;
 
 /** The same wall-clock moment, expressed in company time. */
@@ -42,11 +48,16 @@ function isWorkingDay(companyDate) {
   return companyDate.getUTCDay() !== 0;
 }
 
-/** Has the company clock passed the cut-off for its own date? */
-function pastCutoff(companyDate) {
+/** Minutes since the cut-off on the company clock; negative before it. */
+function minutesPastCutoff(companyDate) {
   const { hour, minute } = cutoffParts();
   const mins = companyDate.getUTCHours() * 60 + companyDate.getUTCMinutes();
-  return mins >= hour * 60 + minute;
+  return mins - (hour * 60 + minute);
+}
+
+/** Has the company clock passed the cut-off for its own date? */
+function pastCutoff(companyDate) {
+  return minutesPastCutoff(companyDate) >= 0;
 }
 
 /** The real UTC instant of the cut-off on a given company date. */
@@ -92,21 +103,54 @@ async function closeOpenDay(date, closeAt) {
   return closed;
 }
 
-let lastRunDate = null;
+/**
+ * Ask everyone still checked in to check out. Returns how many were asked.
+ */
+async function remindOpenDay(date) {
+  const open = await Attendance.findAll({
+    where: { date, checkInTime: { [Op.ne]: null }, checkOutTime: { [Op.is]: null } },
+    attributes: ['userId'],
+  });
+  for (const row of open) {
+    await createNotification(
+      row.userId,
+      'Please check out',
+      `It is past ${CUTOFF}. Open the app and tap Check Out to close your day.`,
+      'attendance',
+    );
+  }
+  return open.length;
+}
 
-/** One tick: close today's open rows once the cut-off has passed. */
+let lastRunDate = null;
+let lastReminderDate = null;
+
+/**
+ * One tick. After the cut-off everyone still open is asked to check out; once
+ * the grace period is up, whatever is still open is closed at the cut-off.
+ */
 async function tick(now = new Date()) {
   const company = companyNow(now);
   const key = dateKey(company);
+  if (!isWorkingDay(company)) return { reminded: 0, closed: 0 };
 
-  if (lastRunDate === key) return 0;
-  if (!isWorkingDay(company)) return 0;
-  if (!pastCutoff(company)) return 0;
+  const past = minutesPastCutoff(company);
+  let reminded = 0;
+  let closed = 0;
 
-  const closed = await closeOpenDay(key, cutoffInstant(company));
-  lastRunDate = key;
-  if (closed > 0) logger.info(`Auto check-out: closed ${closed} open attendance row(s) for ${key}`);
-  return closed;
+  if (past >= 0 && lastReminderDate !== key) {
+    reminded = await remindOpenDay(key);
+    lastReminderDate = key;
+    if (reminded > 0) logger.info(`Check-out reminder sent to ${reminded} member(s) for ${key}`);
+  }
+
+  if (past >= GRACE_MINUTES && lastRunDate !== key) {
+    closed = await closeOpenDay(key, cutoffInstant(company));
+    lastRunDate = key;
+    if (closed > 0) logger.info(`Auto check-out: closed ${closed} open row(s) for ${key} at ${CUTOFF}`);
+  }
+
+  return { reminded, closed };
 }
 
 function start() {
@@ -116,22 +160,23 @@ function start() {
     CHECK_EVERY_MS,
   );
   timer.unref?.();
-  logger.info(`Auto check-out armed for ${CUTOFF} (Mon–Sat, UTC${OFFSET_MINUTES >= 0 ? '+' : ''}${OFFSET_MINUTES / 60}h)`);
+  logger.info(`Check-out reminder at ${CUTOFF}, auto close ${GRACE_MINUTES} min later (Mon–Sat, UTC${OFFSET_MINUTES >= 0 ? '+' : ''}${OFFSET_MINUTES / 60}h)`);
 }
 
 module.exports = {
   start,
   tick,
   closeOpenDay,
+  remindOpenDay,
   // exported for the self-check below
-  _internals: { companyNow, isWorkingDay, pastCutoff, cutoffInstant, dateKey },
+  _internals: { companyNow, isWorkingDay, pastCutoff, minutesPastCutoff, cutoffInstant, dateKey },
 };
 
 // ── Self-check ───────────────────────────────────────────────────────────────
 // Run this file directly to prove the clock logic: node src/jobs/autoCheckout.js
 if (require.main === module) {
   const assert = require('assert');
-  const { companyNow, isWorkingDay, pastCutoff, cutoffInstant, dateKey } = module.exports._internals;
+  const { companyNow, isWorkingDay, pastCutoff, minutesPastCutoff, cutoffInstant, dateKey } = module.exports._internals;
 
   // 2026-11-24 is a Tuesday. 13:00 UTC is 18:30 in India.
   const beforeCut = companyNow(new Date('2026-11-24T12:59:00Z'));
@@ -155,6 +200,11 @@ if (require.main === module) {
   const checkIn = new Date('2026-11-24T04:34:00Z');
   const hours = Number(((cutoffInstant(afterCut) - checkIn) / 3600000).toFixed(2));
   assert.strictEqual(hours, 8.43);
+
+  // The reminder fires at the cut-off; closing waits a full hour longer.
+  assert.strictEqual(minutesPastCutoff(afterCut), 0, 'reminder time');
+  assert.strictEqual(minutesPastCutoff(companyNow(new Date('2026-11-24T14:00:00Z'))), 60, 'close time');
+  assert.ok(minutesPastCutoff(beforeCut) < 0, 'nothing happens before 18:30');
 
   console.log('auto check-out self-check passed');
 }
