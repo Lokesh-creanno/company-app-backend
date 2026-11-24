@@ -24,6 +24,9 @@ async function startServer() {
     const { seedSuperAdmins } = require('./utils/seedSuperAdmins');
     await seedSuperAdmins();
 
+    // Close attendance left open at the end of the working day.
+    require('./jobs/autoCheckout').start();
+
     app.listen(PORT, () => {
       logger.info(`🚀 Server running → http://localhost:${PORT}`);
       logger.info(`   Mode : ${process.env.NODE_ENV || 'development'}`);
